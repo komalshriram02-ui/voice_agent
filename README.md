@@ -29,3 +29,7 @@ Open http://127.0.0.1:8000/dashboard to see the dashboard.
 - GET /stats : totals and calls by intent
 - GET /dashboard : live dashboard
 - GET /docs : API documentation
+
+## Dashboard Preview
+
+![Dashboard](dashboard.png)
