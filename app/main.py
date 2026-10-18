@@ -23,9 +23,8 @@ class CallCreate(BaseModel):
     transcript: str
 
 
-@app.get("/")
-def home():
-    return {"message": "Voice agent backend is running"}
+
+
 
 
 @app.post("/appointments")
@@ -482,3 +481,83 @@ def cancel_by_name(data: CancelRequest, db: Session = Depends(get_db)):
     appt.status = "cancelled"
     db.commit()
     return {"found": True}
+
+
+@app.get("/", response_class=HTMLResponse)
+def home():
+    return """
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voice Appointment Agent</title>
+<style>
+  body { margin: 0; font-family: Arial, sans-serif; background: #f4f6fb; color: #222; }
+  nav { background: #1f4fd8; padding: 14px 24px; display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
+  nav .brand { color: #fff; font-weight: bold; font-size: 18px; margin-right: auto; }
+  nav a { color: #fff; text-decoration: none; font-size: 15px; }
+  nav a:hover { text-decoration: underline; }
+  .hero { text-align: center; padding: 40px 20px 10px; }
+  .hero h1 { margin: 0 0 8px; }
+  .hero p { color: #555; margin: 0; }
+  .cards { display: flex; gap: 16px; justify-content: center; padding: 24px; flex-wrap: wrap; }
+  .card { background: #fff; border-radius: 10px; padding: 20px 30px; min-width: 150px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+  .card .num { font-size: 32px; font-weight: bold; color: #1f4fd8; }
+  .card .label { color: #666; margin-top: 4px; }
+  .buttons { display: flex; gap: 16px; justify-content: center; padding: 10px 20px 40px; flex-wrap: wrap; }
+  .btn { background: #1f4fd8; color: #fff; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-size: 16px; }
+  .btn:hover { background: #1740b0; }
+</style>
+</head>
+<body>
+  <nav>
+    <span class="brand">Voice Appointment Agent</span>
+    <a href="/">Home</a>
+    <a href="/voice">Voice Agent</a>
+    <a href="/dashboard">Dashboard</a>
+    <a href="/docs">API Docs</a>
+  </nav>
+
+  <div class="hero">
+    <h1>Voice Appointment Agent</h1>
+    <p>English, Hindi aur Marathi mein appointment book aur cancel karo</p>
+  </div>
+
+  <div class="cards">
+    <div class="card"><div class="num" id="total">...</div><div class="label">Total Calls</div></div>
+    <div class="card"><div class="num" id="book">...</div><div class="label">Bookings</div></div>
+    <div class="card"><div class="num" id="cancel">...</div><div class="label">Cancellations</div></div>
+    <div class="card"><div class="num" id="active">...</div><div class="label">Active Appointments</div></div>
+  </div>
+
+  <div class="buttons">
+    <a class="btn" href="/voice">Talk to Agent</a>
+    <a class="btn" href="/dashboard">View Dashboard</a>
+    <a class="btn" href="/docs">API Docs</a>
+  </div>
+
+<script>
+fetch("/stats")
+  .then(r => r.json())
+  .then(d => {
+    const calls = d.calls_by_intent || {};
+    const b = calls.book_appointment || 0;
+    const c = calls.cancel_appointment || 0;
+    document.getElementById("total").textContent = d.total_calls !== undefined ? d.total_calls : (b + c);
+    document.getElementById("book").textContent = b;
+    document.getElementById("cancel").textContent = c;
+    document.getElementById("active").textContent = d.total_appointments !== undefined ? d.total_appointments : 0;
+
+  })
+  .catch(() => {
+    document.getElementById("total").textContent = "-";
+    document.getElementById("book").textContent = "-";
+    document.getElementById("cancel").textContent = "-";
+    document.getElementById("active").textContent = "-";
+    
+  });
+</script>
+</body>
+</html>
+"""
