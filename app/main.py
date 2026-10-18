@@ -243,14 +243,34 @@ def voice_page():
   <div class="box">You said: <b id="said">-</b></div>
   <div class="box">Agent: <b id="reply">-</b></div>
 <script>
-function startListening() {
-  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { alert("Chrome use karo"); return; }
-  var rec = new SR();
-  rec.lang = "en-IN";
-  rec.onresult = function(e) {
-    var text = e.results[0][0].transcript;
-    document.getElementById("said").innerText = text;
+var step = "start";
+var custName = "";
+
+function say(msg, listenAfter) {
+  document.getElementById("reply").innerText = msg;
+  var u = new SpeechSynthesisUtterance(msg);
+  u.onend = function() { if (listenAfter) startListening(); };
+  speechSynthesis.speak(u);
+}
+
+function pad(n) { return (n < 10 ? "0" : "") + n; }
+
+function parseWhen(text) {
+  var t = text.toLowerCase().replace(/[.]/g, "");
+  var m = t.match(/([0-9]{1,2})(:([0-9]{2}))? *(am|pm)/);
+  if (!m) return null;
+  var hour = parseInt(m[1]);
+  var min = m[3] ? parseInt(m[3]) : 0;
+  if (m[4] == "pm" && hour < 12) hour += 12;
+  if (m[4] == "am" && hour == 12) hour = 0;
+  var d = new Date();
+  if (t.indexOf("day after tomorrow") >= 0) d.setDate(d.getDate() + 2);
+  else if (t.indexOf("tomorrow") >= 0) d.setDate(d.getDate() + 1);
+  return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + "T" + pad(hour) + ":" + pad(min) + ":00";
+}
+
+function handle(text) {
+  if (step == "start") {
     fetch("/calls", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
@@ -258,12 +278,48 @@ function startListening() {
     })
     .then(function(r) { return r.json(); })
     .then(function(d) {
-      var msg = "Sorry, I did not understand.";
-      if (d.intent == "book_appointment") msg = "Sure, I have noted your appointment request.";
-      if (d.intent == "cancel_appointment") msg = "Okay, I have noted your cancellation.";
-      document.getElementById("reply").innerText = msg;
-      speechSynthesis.speak(new SpeechSynthesisUtterance(msg));
+      if (d.intent == "book_appointment") {
+        step = "name";
+        say("Sure. What is your name?", true);
+      } else if (d.intent == "cancel_appointment") {
+        say("Okay, I have noted your cancellation.", false);
+      } else {
+        say("Sorry, I did not understand.", false);
+      }
     });
+  } else if (step == "name") {
+    custName = text.replace(/my name is|i am|this is/gi, "").trim();
+if (!custName) { say("Sorry, I did not catch your name. Please say your name.", true); return; }
+    step = "time";
+    say("Thanks " + custName + ". Which day and time? For example, tomorrow at 5 PM.", true);
+  } else if (step == "time") {
+    var when = parseWhen(text);
+    if (!when) {
+      say("Sorry, please say it like tomorrow at 5 PM.", true);
+      return;
+    }
+    fetch("/appointments", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({customer_name: custName, phone: "browser", appointment_time: when})
+    })
+    .then(function(r) {
+      step = "start";
+      if (r.ok) say("Done. Your appointment is booked, " + custName + ".", false);
+      else say("Sorry, something went wrong.", false);
+    });
+  }
+}
+
+function startListening() {
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { alert("Use Chrome"); return; }
+  var rec = new SR();
+  rec.lang = "en-IN";
+  rec.onresult = function(e) {
+    var text = e.results[0][0].transcript;
+    document.getElementById("said").innerText = text;
+    handle(text);
   };
   rec.start();
 }
@@ -271,3 +327,25 @@ function startListening() {
 </body>
 </html>
 """
+
+from datetime import datetime
+from pydantic import BaseModel
+
+
+class AppointmentCreate(BaseModel):
+    customer_name: str
+    appointment_time: datetime
+    phone: str = "browser"
+
+
+@app.post("/appointments")
+def create_appointment(data: AppointmentCreate, db: Session = Depends(get_db)):
+    appt = models.Appointment(
+        customer_name=data.customer_name,
+        phone=data.phone,
+        appointment_time=data.appointment_time,
+    )
+    db.add(appt)
+    db.commit()
+    db.refresh(appt)
+    return appt 
