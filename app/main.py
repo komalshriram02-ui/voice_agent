@@ -256,42 +256,123 @@ def voice_page():
 <style>
   body { font-family: Arial, sans-serif; background: #f4f6f8; text-align: center; padding: 40px; }
   button { background: #2563eb; color: #fff; border: none; border-radius: 50px; padding: 20px 40px; font-size: 20px; cursor: pointer; }
+  select { font-size: 18px; padding: 8px 14px; border-radius: 8px; margin-bottom: 20px; }
   .box { background: #fff; border-radius: 10px; padding: 20px; margin: 20px auto; max-width: 500px; }
 </style>
 </head>
 <body>
   <h1>Voice Agent</h1>
+  <select id="lang" onchange="setLang()">
+    <option value="en-IN">English</option>
+    <option value="hi-IN">हिन्दी (Hindi)</option>
+    <option value="mr-IN">मराठी (Marathi)</option>
+  </select>
+  <br>
   <button onclick="startListening()">Click the button and speak</button>
   <div class="box">You said: <b id="said">-</b></div>
   <div class="box">Agent: <b id="reply">-</b></div>
 <script>
 var step = "start";
 var custName = "";
+var LANG = "en-IN";
+
+var M = {
+  "en-IN": {
+    name: "Sure. What is your name?",
+    noname: "Sorry, I did not catch your name. Please say your name.",
+    time: function(n) { return "Thanks " + n + ". Which day and time? For example, tomorrow at 5 PM."; },
+    badtime: "Sorry, please say it like tomorrow at 5 PM.",
+    booked: function(n) { return "Done. Your appointment is booked, " + n + "."; },
+    cancelq: "Sure. What name is the appointment under?",
+    cancelled: function(n) { return "Done. Your appointment is cancelled, " + n + "."; },
+    nocancel: "Sorry, I could not find a booked appointment under that name.",
+    unknown: "Sorry, I did not understand.",
+    error: "Sorry, something went wrong."
+  },
+  "hi-IN": {
+    name: "ठीक है। आपका नाम क्या है?",
+    noname: "माफ़ कीजिए, मैं नाम नहीं सुन पाई। कृपया अपना नाम बताइए।",
+    time: function(n) { return "धन्यवाद " + n + "। कौन सा दिन और समय? जैसे, कल शाम 5 बजे।"; },
+    badtime: "माफ़ कीजिए, कृपया ऐसे बोलिए: कल शाम 5 बजे।",
+    booked: function(n) { return "हो गया। आपकी अपॉइंटमेंट बुक हो गई है, " + n + "।"; },
+    cancelq: "ठीक है। अपॉइंटमेंट किस नाम से है?",
+    cancelled: function(n) { return "हो गया। आपकी अपॉइंटमेंट रद्द हो गई है, " + n + "।"; },
+    nocancel: "माफ़ कीजिए, इस नाम से कोई बुक अपॉइंटमेंट नहीं मिली।",
+    unknown: "माफ़ कीजिए, मैं समझ नहीं पाई।",
+    error: "माफ़ कीजिए, कुछ गड़बड़ हो गई।"
+  },
+  "mr-IN": {
+    name: "ठीक आहे. तुमचे नाव काय आहे?",
+    noname: "माफ करा, मला नाव ऐकू आले नाही. कृपया तुमचे नाव सांगा.",
+    time: function(n) { return "धन्यवाद " + n + ". कोणता दिवस आणि वेळ? उदा. उद्या संध्याकाळी 5 वाजता."; },
+    badtime: "माफ करा, कृपया असे सांगा: उद्या संध्याकाळी 5 वाजता.",
+    booked: function(n) { return "झाले. तुमची अपॉइंटमेंट बुक झाली आहे, " + n + "."; },
+    cancelq: "ठीक आहे. अपॉइंटमेंट कोणत्या नावाने आहे?",
+    cancelled: function(n) { return "झाले. तुमची अपॉइंटमेंट रद्द झाली आहे, " + n + "."; },
+    nocancel: "माफ करा, या नावाने बुक केलेली अपॉइंटमेंट सापडली नाही.",
+    unknown: "माफ करा, मला समजले नाही.",
+    error: "माफ करा, काहीतरी चुकले."
+  }
+};
+
+function setLang() {
+  LANG = document.getElementById("lang").value;
+  step = "start";
+}
 
 function say(msg, listenAfter) {
   document.getElementById("reply").innerText = msg;
   var u = new SpeechSynthesisUtterance(msg);
+  u.lang = LANG;
   u.onend = function() { if (listenAfter) startListening(); };
   speechSynthesis.speak(u);
 }
 
 function pad(n) { return (n < 10 ? "0" : "") + n; }
 
+function cleanName(text) {
+  var t = text.replace(/my name is|i am|this is/gi, "");
+  t = " " + t + " ";
+  var phrases = ["मेरा नाम", "माझे नाव", "माझं नाव", "है", "आहे", "हूँ", "हूं"];
+  for (var i = 0; i < phrases.length; i++) {
+    t = t.split(" " + phrases[i] + " ").join(" ");
+  }
+  return t.trim();
+}
+
+function hasAny(t, list) {
+  for (var i = 0; i < list.length; i++) {
+    if (t.indexOf(list[i]) >= 0) return true;
+  }
+  return false;
+}
+
 function parseWhen(text) {
-  var t = text.toLowerCase().replace(/[.]/g, "");
-  var m = t.match(/([0-9]{1,2})(:([0-9]{2}))? *(am|pm)/);
+  var t = " " + text.toLowerCase().replace(/[.,]/g, " ") + " ";
+  var dev = "०१२३४५६७८९";
+  for (var i = 0; i < 10; i++) { t = t.split(dev.charAt(i)).join(String(i)); }
+  var words = {
+    "एक": 1, "दो": 2, "तीन": 3, "चार": 4, "पांच": 5, "पाँच": 5, "छह": 6, "सात": 7,
+    "आठ": 8, "नौ": 9, "दस": 10, "ग्यारह": 11, "बारह": 12,
+    "दोन": 2, "पाच": 5, "सहा": 6, "नऊ": 9, "दहा": 10, "अकरा": 11, "बारा": 12
+  };
+  for (var w in words) { t = t.split(" " + w + " ").join(" " + words[w] + " "); }
+  var m = t.match(/([0-9]{1,2})(:([0-9]{2}))?/);
   if (!m) return null;
   var hour = parseInt(m[1]);
   var min = m[3] ? parseInt(m[3]) : 0;
-  if (m[4] == "pm" && hour < 12) hour += 12;
-  if (m[4] == "am" && hour == 12) hour = 0;
+  var isPM = /[0-9] *(p m|pm)/.test(t) || hasAny(t, ["शाम", "दोपहर", "रात", "संध्याकाळ", "सायंकाळ", "दुपार"]);
+  var isAM = /[0-9] *(a m|am)/.test(t) || hasAny(t, ["सुबह", "सवेरे", "सकाळ"]);
+  if (isPM && hour < 12) hour += 12;
+  if (isAM && hour == 12) hour = 0;
   var d = new Date();
-  if (t.indexOf("day after tomorrow") >= 0) d.setDate(d.getDate() + 2);
-  else if (t.indexOf("tomorrow") >= 0) d.setDate(d.getDate() + 1);
+  if (hasAny(t, ["day after tomorrow", "परसों", "परसो", "परवा"])) d.setDate(d.getDate() + 2);
+  else if (hasAny(t, ["tomorrow", "कल", "उद्या"])) d.setDate(d.getDate() + 1);
   return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + "T" + pad(hour) + ":" + pad(min) + ":00";
 }
 
 function handle(text) {
+  var L = M[LANG];
   if (step == "start") {
     fetch("/calls", {
       method: "POST",
@@ -302,20 +383,21 @@ function handle(text) {
     .then(function(d) {
       if (d.intent == "book_appointment") {
         step = "name";
-        say("Sure. What is your name?", true);
+        say(L.name, true);
       } else if (d.intent == "cancel_appointment") {
-       step = "cancelname"; say("Sure. What name is the appointment under?", true);
+        step = "cancelname";
+        say(L.cancelq, true);
       } else {
-        say("Sorry, I did not understand.", false);
+        say(L.unknown, false);
       }
     });
   } else if (step == "name") {
-    custName = text.replace(/my name is|i am|this is/gi, "").trim();
-if (!custName) { say("Sorry, I did not catch your name. Please say your name.", true); return; }
+    custName = cleanName(text);
+    if (!custName) { say(L.noname, true); return; }
     step = "time";
-    say("Thanks " + custName + ". Which day and time? For example, tomorrow at 5 PM.", true);
+    say(L.time(custName), true);
   } else if (step == "cancelname") {
-    var cn = text.replace(/my name is|i am|this is/gi, "").trim();
+    var cn = cleanName(text);
     fetch("/appointments/cancel-by-name", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
@@ -324,15 +406,12 @@ if (!custName) { say("Sorry, I did not catch your name. Please say your name.", 
     .then(function(r) { return r.json(); })
     .then(function(d) {
       step = "start";
-      if (d.found) say("Done. Your appointment is cancelled, " + cn + ".", false);
-      else say("Sorry, I could not find a booked appointment under that name.", false);
+      if (d.found) say(L.cancelled(cn), false);
+      else say(L.nocancel, false);
     });
   } else if (step == "time") {
     var when = parseWhen(text);
-    if (!when) {
-      say("Sorry, please say it like tomorrow at 5 PM.", true);
-      return;
-    }
+    if (!when) { say(L.badtime, true); return; }
     fetch("/appointments", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
@@ -340,8 +419,8 @@ if (!custName) { say("Sorry, I did not catch your name. Please say your name.", 
     })
     .then(function(r) {
       step = "start";
-      if (r.ok) say("Done. Your appointment is booked, " + custName + ".", false);
-      else say("Sorry, something went wrong.", false);
+      if (r.ok) say(L.booked(custName), false);
+      else say(L.error, false);
     });
   }
 }
@@ -350,7 +429,7 @@ function startListening() {
   var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { alert("Use Chrome"); return; }
   var rec = new SR();
-  rec.lang = "en-IN";
+  rec.lang = LANG;
   rec.onresult = function(e) {
     var text = e.results[0][0].transcript;
     document.getElementById("said").innerText = text;
@@ -358,9 +437,7 @@ function startListening() {
   };
   rec.start();
 }
-
 </script>
-
 </body>
 </html>
 """
