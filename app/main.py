@@ -487,75 +487,210 @@ def cancel_by_name(data: CancelRequest, db: Session = Depends(get_db)):
 def home():
     return """
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Voice Appointment Agent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  body { margin: 0; font-family: Arial, sans-serif; background: #f4f6fb; color: #222; }
-  nav { background: #1f4fd8; padding: 14px 24px; display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
-  nav .brand { color: #fff; font-weight: bold; font-size: 18px; margin-right: auto; }
-  nav a { color: #fff; text-decoration: none; font-size: 15px; }
-  nav a:hover { text-decoration: underline; }
-  .hero { text-align: center; padding: 40px 20px 10px; }
-  .hero h1 { margin: 0 0 8px; }
-  .hero p { color: #555; margin: 0; }
-  .cards { display: flex; gap: 16px; justify-content: center; padding: 24px; flex-wrap: wrap; }
-  .card { background: #fff; border-radius: 10px; padding: 20px 30px; min-width: 150px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
-  .card .num { font-size: 32px; font-weight: bold; color: #1f4fd8; }
-  .card .label { color: #666; margin-top: 4px; }
-  .buttons { display: flex; gap: 16px; justify-content: center; padding: 10px 20px 40px; flex-wrap: wrap; }
-  .btn { background: #1f4fd8; color: #fff; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-size: 16px; }
-  .btn:hover { background: #1740b0; }
+  :root {
+    --primary: #4f46e5;
+    --secondary: #06b6d4;
+    --dark: #0f172a;
+    --text: #334155;
+    --muted: #64748b;
+    --bg: #f1f5f9;
+    --card: #ffffff;
+    --gradient: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #06b6d4 100%);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: 'Poppins', 'Segoe UI', Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  /* ---------- NAVBAR ---------- */
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(15, 23, 42, 0.92);
+    backdrop-filter: blur(10px);
+    padding: 14px 6%;
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+  }
+  nav .brand {
+    color: #fff; font-weight: 700; font-size: 19px;
+    margin-right: auto; display: flex; align-items: center; gap: 10px;
+  }
+  nav .brand .logo {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: var(--gradient);
+    display: flex; align-items: center; justify-content: center; font-size: 18px;
+  }
+  nav a.link {
+    color: #cbd5e1; text-decoration: none; font-size: 14px; font-weight: 500;
+    padding: 8px 16px; border-radius: 8px; transition: all 0.25s;
+  }
+  nav a.link:hover { background: rgba(255,255,255,0.1); color: #fff; }
+  nav a.link.active { background: var(--gradient); color: #fff; }
+
+  /* ---------- HERO ---------- */
+  .hero {
+    background: var(--gradient);
+    color: #fff; text-align: center;
+    padding: 80px 20px 130px;
+    position: relative; overflow: hidden;
+  }
+  .hero::before, .hero::after {
+    content: ""; position: absolute; border-radius: 50%;
+    background: rgba(255,255,255,0.08);
+  }
+  .hero::before { width: 400px; height: 400px; top: -150px; left: -100px; }
+  .hero::after { width: 300px; height: 300px; bottom: -120px; right: -60px; }
+  .hero > * { position: relative; z-index: 1; }
+  .badge {
+    display: inline-block; background: rgba(255,255,255,0.18);
+    border: 1px solid rgba(255,255,255,0.3);
+    padding: 6px 18px; border-radius: 50px; font-size: 13px; font-weight: 500;
+    margin-bottom: 22px;
+  }
+  .hero h1 { font-size: clamp(30px, 5vw, 52px); font-weight: 700; line-height: 1.2; margin-bottom: 16px; }
+  .hero p { font-size: clamp(14px, 2vw, 18px); opacity: 0.92; max-width: 620px; margin: 0 auto 32px; }
+  .hero-buttons { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    text-decoration: none; padding: 14px 30px; border-radius: 50px;
+    font-size: 15px; font-weight: 600; transition: all 0.3s; display: inline-block;
+  }
+  .btn-white { background: #fff; color: var(--primary); box-shadow: 0 8px 24px rgba(0,0,0,0.2); }
+  .btn-white:hover { transform: translateY(-3px); box-shadow: 0 12px 30px rgba(0,0,0,0.28); }
+  .btn-outline { border: 2px solid rgba(255,255,255,0.8); color: #fff; }
+  .btn-outline:hover { background: #fff; color: var(--primary); transform: translateY(-3px); }
+
+  /* ---------- STATS ---------- */
+  .stats {
+    max-width: 1100px; margin: -70px auto 0; padding: 0 20px;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 20px;
+    position: relative; z-index: 2;
+  }
+  .stat {
+    background: var(--card); border-radius: 18px; padding: 26px 22px;
+    display: flex; align-items: center; gap: 18px;
+    box-shadow: 0 10px 30px rgba(15,23,42,0.1);
+    transition: transform 0.3s, box-shadow 0.3s;
+  }
+  .stat:hover { transform: translateY(-6px); box-shadow: 0 18px 40px rgba(79,70,229,0.2); }
+  .icon {
+    width: 56px; height: 56px; border-radius: 14px; font-size: 26px;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .i1 { background: #e0e7ff; } .i2 { background: #dcfce7; }
+  .i3 { background: #fee2e2; } .i4 { background: #cffafe; }
+  .stat .num { font-size: 30px; font-weight: 700; color: var(--dark); line-height: 1.1; }
+  .stat .label { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+  /* ---------- FEATURES ---------- */
+  .section { max-width: 1100px; margin: 70px auto 40px; padding: 0 20px; text-align: center; }
+  .section h2 { font-size: 30px; color: var(--dark); margin-bottom: 8px; }
+  .section .sub { color: var(--muted); margin-bottom: 36px; }
+  .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; }
+  .feature {
+    background: var(--card); border-radius: 18px; padding: 34px 26px;
+    box-shadow: 0 6px 20px rgba(15,23,42,0.06);
+    border-top: 4px solid transparent;
+    transition: all 0.3s;
+  }
+  .feature:hover { transform: translateY(-8px); border-top-color: var(--primary); box-shadow: 0 18px 40px rgba(79,70,229,0.15); }
+  .feature .f-icon { font-size: 40px; margin-bottom: 14px; }
+  .feature h3 { color: var(--dark); font-size: 18px; margin-bottom: 8px; }
+  .feature p { color: var(--muted); font-size: 14px; line-height: 1.7; }
+
+  /* ---------- FOOTER ---------- */
+  footer {
+    margin-top: 60px; background: var(--dark); color: #94a3b8;
+    text-align: center; padding: 26px 20px; font-size: 14px;
+  }
+  footer span { color: #fff; font-weight: 600; }
+
+  @media (max-width: 600px) {
+    nav { padding: 12px 4%; }
+    nav .brand { width: 100%; margin-bottom: 6px; }
+    .hero { padding: 60px 16px 110px; }
+  }
 </style>
 </head>
 <body>
+
   <nav>
-    <span class="brand">Voice Appointment Agent</span>
-    <a href="/">Home</a>
-    <a href="/voice">Voice Agent</a>
-    <a href="/dashboard">Dashboard</a>
-    <a href="/docs">API Docs</a>
+    <span class="brand"><span class="logo">🎙️</span> Voice Agent</span>
+    <a class="link active" href="/">Home</a>
+    <a class="link" href="/voice">Voice Agent</a>
+    <a class="link" href="/dashboard">Dashboard</a>
+    <a class="link" href="/docs">API Docs</a>
   </nav>
 
-  <div class="hero">
+  <section class="hero">
+    <span class="badge">✨ AI Powered Voice Assistant</span>
     <h1>Voice Appointment Agent</h1>
-    <p>English, Hindi aur Marathi mein appointment book aur cancel karo</p>
-  </div>
+   
+   <p>Book and cancel appointments just by speaking. Works in English, Hindi and Marathi.</p>
+    <div class="hero-buttons">
+      <a class="btn btn-white" href="/voice">🎤 Talk to Agent</a>
+      <a class="btn btn-outline" href="/dashboard">📊 View Dashboard</a>
+    </div>
+  </section>
 
-  <div class="cards">
-    <div class="card"><div class="num" id="total">...</div><div class="label">Total Calls</div></div>
-    <div class="card"><div class="num" id="book">...</div><div class="label">Bookings</div></div>
-    <div class="card"><div class="num" id="cancel">...</div><div class="label">Cancellations</div></div>
-    <div class="card"><div class="num" id="active">...</div><div class="label">Active Appointments</div></div>
-  </div>
+  <section class="stats">
+    <div class="stat"><div class="icon i1">📞</div><div><div class="num" id="total">...</div><div class="label">Total Calls</div></div></div>
+    <div class="stat"><div class="icon i2">✅</div><div><div class="num" id="book">...</div><div class="label">Bookings</div></div></div>
+    <div class="stat"><div class="icon i3">❌</div><div><div class="num" id="cancel">...</div><div class="label">Cancellations</div></div></div>
+    <div class="stat"><div class="icon i4">📅</div><div><div class="num" id="active">...</div><div class="label">Active Appointments</div></div></div>
+  </section>
 
-  <div class="buttons">
-    <a class="btn" href="/voice">Talk to Agent</a>
-    <a class="btn" href="/dashboard">View Dashboard</a>
-    <a class="btn" href="/docs">API Docs</a>
-  </div>
+  <section class="section">
+    <h2>Features</h2>
+    <p class="sub">What this agent can do for you</p>
+    <div class="features">
+  <div class="feature"><div class="f-icon">🌐</div><h3>3 Languages</h3><p>Speak in English, Hindi or Marathi and the agent replies in the same language.</p></div>
+     <div class="feature"><div class="f-icon">🗓️</div><h3>Book &amp; Cancel</h3><p>Asks for your name and books or cancels appointments, just like a real receptionist.</p></div>
+     <div class="feature"><div class="f-icon">📈</div><h3>Live Dashboard</h3><p>See live counts of every call and the full appointment list in one place.</p></div>
+    </div>
+  </section>
+
+  <footer>Built with ❤️ using <span>FastAPI</span> by <span>Komal Shriram</span></footer>
 
 <script>
+function animate(id, target) {
+  const el = document.getElementById(id);
+  if (isNaN(target)) { el.textContent = target; return; }
+  let n = 0;
+  const step = Math.max(1, Math.ceil(target / 30));
+  const t = setInterval(() => {
+    n += step;
+    if (n >= target) { n = target; clearInterval(t); }
+    el.textContent = n;
+  }, 30);
+}
+
 fetch("/stats")
   .then(r => r.json())
   .then(d => {
     const calls = d.calls_by_intent || {};
     const b = calls.book_appointment || 0;
     const c = calls.cancel_appointment || 0;
-    document.getElementById("total").textContent = d.total_calls !== undefined ? d.total_calls : (b + c);
-    document.getElementById("book").textContent = b;
-    document.getElementById("cancel").textContent = c;
-    document.getElementById("active").textContent = d.total_appointments !== undefined ? d.total_appointments : 0;
-
+    animate("total", d.total_calls !== undefined ? d.total_calls : (b + c));
+    animate("book", b);
+    animate("cancel", c);
+    animate("active", d.total_appointments !== undefined ? d.total_appointments : 0);
   })
   .catch(() => {
-    document.getElementById("total").textContent = "-";
-    document.getElementById("book").textContent = "-";
-    document.getElementById("cancel").textContent = "-";
-    document.getElementById("active").textContent = "-";
-    
+    ["total", "book", "cancel", "active"].forEach(id => {
+      document.getElementById(id).textContent = "-";
+    });
   });
 </script>
 </body>
