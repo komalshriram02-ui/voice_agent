@@ -28,6 +28,7 @@ Open http://127.0.0.1:8000/dashboard to see the dashboard.
 - GET /calls : list all calls
 - GET /stats : totals and calls by intent
 - GET /dashboard : live dashboard
+- GET /voice : talk to the voice agent and book an appointment
 - GET /docs : API documentation
 
 ## Dashboard Preview

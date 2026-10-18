@@ -148,6 +148,28 @@ async function loadStats() {
 loadStats();
 setInterval(loadStats, 5000);
 </script>
+<h2>Appointments</h2>
+<table>
+  <thead><tr><th>Name</th><th>Date and time</th><th>Status</th></tr></thead>
+  <tbody id="apptRows"></tbody>
+</table>
+<script>
+function loadAppts() {
+  fetch("/appointments")
+    .then(function(r) { return r.json(); })
+    .then(function(list) {
+      var html = "";
+      list.reverse().forEach(function(a) {
+        html += "<tr><td>" + (a.customer_name || "-") + "</td><td>" +
+          a.appointment_time.replace("T", " ").slice(0, 16) + "</td><td>" +
+          a.status + "</td></tr>";
+      });
+      document.getElementById("apptRows").innerHTML = html;
+    });
+}
+loadAppts();
+setInterval(loadAppts, 5000);
+</script>
 </body>
 </html>
 """
@@ -282,7 +304,7 @@ function handle(text) {
         step = "name";
         say("Sure. What is your name?", true);
       } else if (d.intent == "cancel_appointment") {
-        say("Okay, I have noted your cancellation.", false);
+       step = "cancelname"; say("Sure. What name is the appointment under?", true);
       } else {
         say("Sorry, I did not understand.", false);
       }
@@ -292,6 +314,19 @@ function handle(text) {
 if (!custName) { say("Sorry, I did not catch your name. Please say your name.", true); return; }
     step = "time";
     say("Thanks " + custName + ". Which day and time? For example, tomorrow at 5 PM.", true);
+  } else if (step == "cancelname") {
+    var cn = text.replace(/my name is|i am|this is/gi, "").trim();
+    fetch("/appointments/cancel-by-name", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({customer_name: cn})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      step = "start";
+      if (d.found) say("Done. Your appointment is cancelled, " + cn + ".", false);
+      else say("Sorry, I could not find a booked appointment under that name.", false);
+    });
   } else if (step == "time") {
     var when = parseWhen(text);
     if (!when) {
@@ -323,7 +358,9 @@ function startListening() {
   };
   rec.start();
 }
+
 </script>
+
 </body>
 </html>
 """
@@ -349,3 +386,22 @@ def create_appointment(data: AppointmentCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(appt)
     return appt 
+
+class CancelRequest(BaseModel):
+    customer_name: str
+
+
+@app.post("/appointments/cancel-by-name")
+def cancel_by_name(data: CancelRequest, db: Session = Depends(get_db)):
+    appt = (
+        db.query(models.Appointment)
+        .filter(models.Appointment.customer_name.ilike(data.customer_name.strip()))
+        .filter(models.Appointment.status == "booked")
+        .order_by(models.Appointment.id.desc())
+        .first()
+    )
+    if not appt:
+        return {"found": False}
+    appt.status = "cancelled"
+    db.commit()
+    return {"found": True}
