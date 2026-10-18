@@ -84,59 +84,157 @@ from fastapi.responses import HTMLResponse
 def dashboard():
     return """
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Voice Agent Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  body { font-family: Arial, sans-serif; background: #f4f6f8; margin: 0; padding: 24px; color: #222; }
-  h1 { margin-top: 0; }
-  .cards { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
-  .card { background: #fff; border-radius: 10px; padding: 20px 28px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); min-width: 180px; }
-  .card .num { font-size: 40px; font-weight: bold; color: #2563eb; }
-  .card .label { color: #666; margin-top: 4px; }
-  table { background: #fff; border-collapse: collapse; border-radius: 10px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.1); min-width: 320px; }
-  th, td { padding: 12px 20px; text-align: left; border-bottom: 1px solid #eee; }
-  th { background: #2563eb; color: #fff; }
-  #status { color: #888; font-size: 13px; margin-top: 12px; }
+  :root {
+    --primary: #4f46e5;
+    --dark: #0f172a;
+    --text: #334155;
+    --muted: #64748b;
+    --bg: #f1f5f9;
+    --card: #ffffff;
+    --gradient: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #06b6d4 100%);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Poppins', 'Segoe UI', Arial, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* NAVBAR */
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(15, 23, 42, 0.92); backdrop-filter: blur(10px);
+    padding: 14px 6%; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+  }
+  nav .brand { color: #fff; font-weight: 700; font-size: 19px; margin-right: auto; display: flex; align-items: center; gap: 10px; }
+  nav .brand .logo { width: 36px; height: 36px; border-radius: 10px; background: var(--gradient); display: flex; align-items: center; justify-content: center; font-size: 18px; }
+  nav a.link { color: #cbd5e1; text-decoration: none; font-size: 14px; font-weight: 500; padding: 8px 16px; border-radius: 8px; transition: all 0.25s; }
+  nav a.link:hover { background: rgba(255,255,255,0.1); color: #fff; }
+  nav a.link.active { background: var(--gradient); color: #fff; }
+
+  /* HEADER */
+  .header { background: var(--gradient); color: #fff; text-align: center; padding: 50px 20px 100px; }
+  .header h1 { font-size: clamp(26px, 4vw, 38px); font-weight: 700; margin-bottom: 8px; }
+  .header p { opacity: 0.92; font-size: 15px; }
+
+  /* STATS */
+  .stats {
+    max-width: 1100px; margin: -60px auto 0; padding: 0 20px;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 20px;
+    position: relative; z-index: 2;
+  }
+  .stat {
+    background: var(--card); border-radius: 18px; padding: 24px 22px;
+    display: flex; align-items: center; gap: 18px;
+    box-shadow: 0 10px 30px rgba(15,23,42,0.1); transition: transform 0.3s, box-shadow 0.3s;
+  }
+  .stat:hover { transform: translateY(-6px); box-shadow: 0 18px 40px rgba(79,70,229,0.2); }
+  .icon { width: 54px; height: 54px; border-radius: 14px; font-size: 25px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .i1 { background: #e0e7ff; } .i2 { background: #dcfce7; } .i3 { background: #fee2e2; } .i4 { background: #cffafe; }
+  .stat .num { font-size: 30px; font-weight: 700; color: var(--dark); line-height: 1.1; }
+  .stat .label { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+  /* PANELS */
+  .grid { max-width: 1100px; margin: 36px auto 0; padding: 0 20px; display: grid; grid-template-columns: 1fr 1.6fr; gap: 24px; }
+  .panel { background: var(--card); border-radius: 18px; padding: 24px; box-shadow: 0 6px 20px rgba(15,23,42,0.06); overflow-x: auto; }
+  .panel h2 { font-size: 18px; color: var(--dark); margin-bottom: 16px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); padding: 10px 12px; border-bottom: 2px solid #e2e8f0; }
+  td { padding: 13px 12px; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
+  tr:hover td { background: #f8fafc; }
+  .empty { text-align: center; color: var(--muted); padding: 24px 12px; }
+
+  .bar { height: 8px; background: #e2e8f0; border-radius: 10px; overflow: hidden; margin-top: 6px; min-width: 80px; }
+  .bar span { display: block; height: 100%; background: var(--gradient); border-radius: 10px; transition: width 0.5s; }
+
+  .badge { display: inline-block; padding: 4px 12px; border-radius: 50px; font-size: 12px; font-weight: 600; }
+  .b-green { background: #dcfce7; color: #166534; }
+  .b-red { background: #fee2e2; color: #991b1b; }
+  .b-gray { background: #e2e8f0; color: #334155; }
+
+  #status { text-align: center; color: var(--muted); font-size: 13px; margin: 28px 0 10px; }
+  footer { margin-top: 30px; background: var(--dark); color: #94a3b8; text-align: center; padding: 22px 20px; font-size: 14px; }
+  footer span { color: #fff; font-weight: 600; }
+
+  @media (max-width: 800px) {
+    .grid { grid-template-columns: 1fr; }
+    nav .brand { width: 100%; margin-bottom: 6px; }
+  }
 </style>
 </head>
 <body>
-  <h1>Voice Agent Dashboard</h1>
 
-  <div class="cards">
-    <div class="card"><div class="num" id="appts">-</div><div class="label">Total Appointments</div></div>
-    <div class="card"><div class="num" id="calls">-</div><div class="label">Total Calls</div></div>
+  <nav>
+    <span class="brand"><span class="logo">🎙️</span> Voice Agent</span>
+    <a class="link" href="/">Home</a>
+    <a class="link" href="/voice">Voice Agent</a>
+    <a class="link active" href="/dashboard">Dashboard</a>
+    <a class="link" href="/docs">API Docs</a>
+  </nav>
+
+  <div class="header">
+    <h1>Voice Agent Dashboard</h1>
+    <p>Live overview of calls and appointments</p>
   </div>
 
-  <h2>Calls by Intent</h2>
-  <table>
-    <thead><tr><th>Intent</th><th>Count</th></tr></thead>
-    <tbody id="intents"></tbody>
-  </table>
+  <section class="stats">
+    <div class="stat"><div class="icon i1">📞</div><div><div class="num" id="calls">-</div><div class="label">Total Calls</div></div></div>
+    <div class="stat"><div class="icon i2">✅</div><div><div class="num" id="book">-</div><div class="label">Bookings</div></div></div>
+    <div class="stat"><div class="icon i3">❌</div><div><div class="num" id="cancel">-</div><div class="label">Cancellations</div></div></div>
+    <div class="stat"><div class="icon i4">📅</div><div><div class="num" id="appts">-</div><div class="label">Active Appointments</div></div></div>
+  </section>
+
+  <section class="grid">
+    <div class="panel">
+      <h2>Calls by Intent</h2>
+      <table>
+        <thead><tr><th>Intent</th><th>Count</th></tr></thead>
+        <tbody id="intents"><tr><td colspan="2" class="empty">Loading...</td></tr></tbody>
+      </table>
+    </div>
+    <div class="panel">
+      <h2>Appointments</h2>
+      <table>
+        <thead><tr><th>Name</th><th>Date and time</th><th>Status</th></tr></thead>
+        <tbody id="apptRows"><tr><td colspan="3" class="empty">Loading...</td></tr></tbody>
+      </table>
+    </div>
+  </section>
 
   <div id="status">Loading...</div>
+  <footer>Built with ❤️ using <span>FastAPI</span> by <span>Komal Shriram</span></footer>
 
 <script>
+function esc(s) {
+  return String(s === undefined || s === null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 async function loadStats() {
   try {
     const res = await fetch("/stats");
     const data = await res.json();
+    const intents = data.calls_by_intent || {};
     document.getElementById("appts").textContent = data.total_appointments;
     document.getElementById("calls").textContent = data.total_calls;
+    document.getElementById("book").textContent = intents.book_appointment || 0;
+    document.getElementById("cancel").textContent = intents.cancel_appointment || 0;
 
     const body = document.getElementById("intents");
-    body.innerHTML = "";
-    for (const [intent, count] of Object.entries(data.calls_by_intent)) {
-      const tr = document.createElement("tr");
-      const td1 = document.createElement("td");
-      const td2 = document.createElement("td");
-      td1.textContent = intent;
-      td2.textContent = count;
-      tr.appendChild(td1);
-      tr.appendChild(td2);
-      body.appendChild(tr);
+    const entries = Object.entries(intents);
+    const max = Math.max(1, ...entries.map(e => e[1]));
+    if (entries.length === 0) {
+      body.innerHTML = '<tr><td colspan="2" class="empty">No calls yet</td></tr>';
+    } else {
+      body.innerHTML = entries.map(function(e) {
+        const pct = Math.round((e[1] / max) * 100);
+        return "<tr><td>" + esc(e[0]) + '<div class="bar"><span style="width:' + pct + '%"></span></div></td><td><b>' + esc(e[1]) + "</b></td></tr>";
+      }).join("");
     }
     document.getElementById("status").textContent =
       "Last updated: " + new Date().toLocaleTimeString() + " (auto-refresh every 5 sec)";
@@ -144,101 +242,37 @@ async function loadStats() {
     document.getElementById("status").textContent = "Could not load stats.";
   }
 }
-loadStats();
-setInterval(loadStats, 5000);
-</script>
-<h2>Appointments</h2>
-<table>
-  <thead><tr><th>Name</th><th>Date and time</th><th>Status</th></tr></thead>
-  <tbody id="apptRows"></tbody>
-</table>
-<script>
+
+function badgeClass(status) {
+  const s = String(status || "").toLowerCase();
+  if (s.indexOf("cancel") !== -1) return "b-red";
+  if (s.indexOf("book") !== -1 || s.indexOf("confirm") !== -1 || s.indexOf("active") !== -1 || s.indexOf("schedul") !== -1) return "b-green";
+  return "b-gray";
+}
+
 function loadAppts() {
   fetch("/appointments")
     .then(function(r) { return r.json(); })
     .then(function(list) {
+      const body = document.getElementById("apptRows");
+      if (!list.length) {
+        body.innerHTML = '<tr><td colspan="3" class="empty">No appointments yet</td></tr>';
+        return;
+      }
       var html = "";
       list.reverse().forEach(function(a) {
-        html += "<tr><td>" + (a.customer_name || "-") + "</td><td>" +
-          a.appointment_time.replace("T", " ").slice(0, 16) + "</td><td>" +
-          a.status + "</td></tr>";
+        var when = String(a.appointment_time || "").replace("T", " ").slice(0, 16);
+        html += "<tr><td>" + esc(a.customer_name || "-") + "</td><td>" + esc(when) +
+          '</td><td><span class="badge ' + badgeClass(a.status) + '">' + esc(a.status) + "</span></td></tr>";
       });
-      document.getElementById("apptRows").innerHTML = html;
+      body.innerHTML = html;
     });
 }
-loadAppts();
-setInterval(loadAppts, 5000);
-</script>
-</body>
-</html>
-"""
 
-@app.get("/dashboard", response_class=HTMLResponse)
-def dashboard():
-    return """
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Voice Agent Dashboard</title>
-<style>
-  body { font-family: Arial, sans-serif; background: #f4f6f8; margin: 0; padding: 24px; color: #222; }
-  h1 { margin-top: 0; }
-  .cards { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
-  .card { background: #fff; border-radius: 10px; padding: 20px 28px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); min-width: 180px; }
-  .card .num { font-size: 40px; font-weight: bold; color: #2563eb; }
-  .card .label { color: #666; margin-top: 4px; }
-  table { background: #fff; border-collapse: collapse; border-radius: 10px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.1); min-width: 320px; }
-  th, td { padding: 12px 20px; text-align: left; border-bottom: 1px solid #eee; }
-  th { background: #2563eb; color: #fff; }
-  #status { color: #888; font-size: 13px; margin-top: 12px; }
-</style>
-</head>
-<body>
-  <h1>Voice Agent Dashboard</h1>
-
-  <div class="cards">
-    <div class="card"><div class="num" id="appts">-</div><div class="label">Total Appointments</div></div>
-    <div class="card"><div class="num" id="calls">-</div><div class="label">Total Calls</div></div>
-  </div>
-
-  <h2>Calls by Intent</h2>
-  <table>
-    <thead><tr><th>Intent</th><th>Count</th></tr></thead>
-    <tbody id="intents"></tbody>
-  </table>
-
-  <div id="status">Loading...</div>
-
-<script>
-async function loadStats() {
-  try {
-    const res = await fetch("/stats");
-    const data = await res.json();
-    document.getElementById("appts").textContent = data.total_appointments;
-    document.getElementById("calls").textContent = data.total_calls;
-
-    const body = document.getElementById("intents");
-    body.innerHTML = "";
-    for (const [intent, count] of Object.entries(data.calls_by_intent)) {
-      const tr = document.createElement("tr");
-      const td1 = document.createElement("td");
-      const td2 = document.createElement("td");
-      td1.textContent = intent;
-      td2.textContent = count;
-      tr.appendChild(td1);
-      tr.appendChild(td2);
-      body.appendChild(tr);
-    }
-    document.getElementById("status").textContent =
-      "Last updated: " + new Date().toLocaleTimeString() + " (auto-refresh every 5 sec)";
-  } catch (e) {
-    document.getElementById("status").textContent = "Could not load stats.";
-  }
-}
 loadStats();
+loadAppts();
 setInterval(loadStats, 5000);
+setInterval(loadAppts, 5000);
 </script>
 </body>
 </html>
