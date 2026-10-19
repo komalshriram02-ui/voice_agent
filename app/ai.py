@@ -9,7 +9,7 @@ load_dotenv()
 
 _key = os.getenv("GEMINI_API_KEY")
 client = genai.Client(api_key=_key) if _key else None
-MODEL = "gemini-flash-latest"
+MODEL = "gemini-flash-lite-latest"
 
 
 def _ask(prompt):
