@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from .database import engine, Base, get_db
 from .intent import detect_intent
+from .ai import analyze_call, extract_booking
 from . import models
 
 Base.metadata.create_all(bind=engine)
@@ -21,10 +22,6 @@ class AppointmentCreate(BaseModel):
 class CallCreate(BaseModel):
     caller_phone: str
     transcript: str
-
-
-
-
 
 
 @app.post("/appointments")
@@ -47,10 +44,13 @@ def list_appointments(db: Session = Depends(get_db)):
 
 @app.post("/calls")
 def create_call(data: CallCreate, db: Session = Depends(get_db)):
+    summary, sentiment = analyze_call(data.transcript)
     call = models.Call(
         caller_phone=data.caller_phone,
         transcript=data.transcript,
         intent=detect_intent(data.transcript),
+        summary=summary,
+        sentiment=sentiment,
     )
     db.add(call)
     db.commit()
@@ -282,28 +282,146 @@ setInterval(loadAppts, 5000);
 def voice_page():
     return """
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Voice Agent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  body { font-family: Arial, sans-serif; background: #f4f6f8; text-align: center; padding: 40px; }
-  button { background: #2563eb; color: #fff; border: none; border-radius: 50px; padding: 20px 40px; font-size: 20px; cursor: pointer; }
-  select { font-size: 18px; padding: 8px 14px; border-radius: 8px; margin-bottom: 20px; }
-  .box { background: #fff; border-radius: 10px; padding: 20px; margin: 20px auto; max-width: 500px; }
+  :root {
+    --primary: #4f46e5;
+    --dark: #0f172a;
+    --text: #334155;
+    --muted: #64748b;
+    --bg: #f1f5f9;
+    --card: #ffffff;
+    --gradient: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #06b6d4 100%);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Poppins', 'Segoe UI', Arial, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* NAVBAR */
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(15, 23, 42, 0.92); backdrop-filter: blur(10px);
+    padding: 14px 6%; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+  }
+  nav .brand { color: #fff; font-weight: 700; font-size: 19px; margin-right: auto; display: flex; align-items: center; gap: 10px; }
+  nav .brand .logo { width: 36px; height: 36px; border-radius: 10px; background: var(--gradient); display: flex; align-items: center; justify-content: center; font-size: 18px; }
+  nav a.link { color: #cbd5e1; text-decoration: none; font-size: 14px; font-weight: 500; padding: 8px 16px; border-radius: 8px; transition: all 0.25s; }
+  nav a.link:hover { background: rgba(255,255,255,0.1); color: #fff; }
+  nav a.link.active { background: var(--gradient); color: #fff; }
+
+  /* HEADER */
+  .header { background: var(--gradient); color: #fff; text-align: center; padding: 50px 20px 110px; }
+  .header h1 { font-size: clamp(26px, 4vw, 38px); font-weight: 700; margin-bottom: 8px; }
+  .header p { opacity: 0.92; font-size: 15px; }
+
+  /* MAIN CARD */
+  .main {
+    max-width: 560px; margin: -70px auto 0; padding: 0 20px; position: relative; z-index: 2;
+  }
+  .panel {
+    background: var(--card); border-radius: 22px; padding: 34px 28px;
+    box-shadow: 0 14px 40px rgba(15,23,42,0.12); text-align: center;
+  }
+  .lang-label { font-size: 13px; color: var(--muted); margin-bottom: 8px; display: block; }
+  select {
+    font-family: inherit; font-size: 16px; padding: 10px 18px; border-radius: 12px;
+    border: 2px solid #e2e8f0; background: #f8fafc; color: var(--dark); cursor: pointer;
+    outline: none; transition: border-color 0.2s;
+  }
+  select:focus { border-color: var(--primary); }
+
+  .mic-wrap { margin: 34px 0 10px; }
+  button.mic {
+    width: 120px; height: 120px; border-radius: 50%; border: none; cursor: pointer;
+    background: var(--gradient); color: #fff; font-size: 48px;
+    box-shadow: 0 12px 30px rgba(79,70,229,0.4);
+    transition: transform 0.25s, box-shadow 0.25s;
+  }
+  button.mic:hover { transform: scale(1.07); box-shadow: 0 16px 40px rgba(79,70,229,0.5); }
+  button.mic.listening { animation: pulse 1.2s infinite; background: linear-gradient(135deg, #ef4444, #f97316); }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(239,68,68,0.55); }
+    70% { box-shadow: 0 0 0 28px rgba(239,68,68,0); }
+    100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); }
+  }
+  #state { margin-top: 14px; font-size: 14px; font-weight: 500; color: var(--muted); min-height: 20px; }
+  #state.on { color: #ef4444; }
+
+  .chat { margin-top: 26px; text-align: left; }
+  .bubble { border-radius: 16px; padding: 16px 18px; margin-bottom: 14px; font-size: 15px; line-height: 1.6; }
+  .bubble .who { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 4px; }
+  .you { background: #eef2ff; border: 1px solid #c7d2fe; }
+  .you .who { color: #4338ca; }
+  .agent { background: #ecfeff; border: 1px solid #a5f3fc; }
+  .agent .who { color: #0e7490; }
+  .bubble b { color: var(--dark); font-weight: 500; }
+
+  .tips { max-width: 560px; margin: 24px auto 0; padding: 0 20px; }
+  .tips div { background: var(--card); border-radius: 16px; padding: 18px 22px; box-shadow: 0 6px 20px rgba(15,23,42,0.06); font-size: 13px; color: var(--muted); line-height: 1.8; }
+  .tips strong { color: var(--dark); }
+
+  footer { margin-top: 50px; background: var(--dark); color: #94a3b8; text-align: center; padding: 22px 20px; font-size: 14px; }
+  footer span { color: #fff; font-weight: 600; }
+
+  @media (max-width: 600px) {
+    nav .brand { width: 100%; margin-bottom: 6px; }
+    .panel { padding: 26px 18px; }
+  }
 </style>
 </head>
 <body>
-  <h1>Voice Agent</h1>
-  <select id="lang" onchange="setLang()">
-    <option value="en-IN">English</option>
-    <option value="hi-IN">हिन्दी (Hindi)</option>
-    <option value="mr-IN">मराठी (Marathi)</option>
-  </select>
-  <br>
-  <button onclick="startListening()">Click the button and speak</button>
-  <div class="box">You said: <b id="said">-</b></div>
-  <div class="box">Agent: <b id="reply">-</b></div>
+
+  <nav>
+    <span class="brand"><span class="logo">🎙️</span> Voice Agent</span>
+    <a class="link" href="/">Home</a>
+    <a class="link active" href="/voice">Voice Agent</a>
+    <a class="link" href="/dashboard">Dashboard</a>
+    <a class="link" href="/docs">API Docs</a>
+  </nav>
+
+  <div class="header">
+    <h1>Talk to the Agent</h1>
+    <p>Book or cancel an appointment just by speaking</p>
+  </div>
+
+  <div class="main">
+    <div class="panel">
+      <label class="lang-label" for="lang">Choose your language</label>
+      <select id="lang" onchange="setLang()">
+        <option value="en-IN">English</option>
+        <option value="hi-IN">हिन्दी (Hindi)</option>
+        <option value="mr-IN">मराठी (Marathi)</option>
+      </select>
+
+      <div class="mic-wrap">
+        <button class="mic" id="micBtn" onclick="startListening()" title="Click and speak">🎤</button>
+        <div id="state">Click the mic and speak</div>
+      </div>
+
+      <div class="chat">
+        <div class="bubble you"><div class="who">You said</div><b id="said">-</b></div>
+        <div class="bubble agent"><div class="who">Agent</div><b id="reply">-</b></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tips">
+    <div>
+      <strong>Try saying:</strong><br>
+      "Book an appointment" &rarr; then your name &rarr; then "tomorrow at 5 PM"<br>
+      "Cancel my appointment" &rarr; then your name<br>
+      <strong>Tip:</strong> use Google Chrome and allow the microphone.
+    </div>
+  </div>
+
+  <footer>Built with ❤️ using <span>FastAPI</span> by <span>Komal Shriram</span></footer>
+
 <script>
 var step = "start";
 var custName = "";
@@ -354,7 +472,7 @@ function setLang() {
 }
 
 function say(msg, listenAfter) {
-  document.getElementById("reply").innerText = msg;
+document.getElementById("reply").innerText = msg;
   var u = new SpeechSynthesisUtterance(msg);
   u.lang = LANG;
   u.onend = function() { if (listenAfter) startListening(); };
@@ -403,7 +521,6 @@ function parseWhen(text) {
   else if (hasAny(t, ["tomorrow", "कल", "उद्या"])) d.setDate(d.getDate() + 1);
   return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + "T" + pad(hour) + ":" + pad(min) + ":00";
 }
-
 function handle(text) {
   var L = M[LANG];
   if (step == "start") {
@@ -463,6 +580,18 @@ function startListening() {
   if (!SR) { alert("Use Chrome"); return; }
   var rec = new SR();
   rec.lang = LANG;
+  var btn = document.getElementById("micBtn");
+  var st = document.getElementById("state");
+  rec.onstart = function() {
+    btn.classList.add("listening");
+    st.classList.add("on");
+    st.innerText = "Listening... please speak";
+  };
+  rec.onend = function() {
+    btn.classList.remove("listening");
+    st.classList.remove("on");
+    st.innerText = "Click the mic and speak";
+  };
   rec.onresult = function(e) {
     var text = e.results[0][0].transcript;
     document.getElementById("said").innerText = text;
@@ -474,7 +603,6 @@ function startListening() {
 </body>
 </html>
 """
-
 from datetime import datetime
 from pydantic import BaseModel
 

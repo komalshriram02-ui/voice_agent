@@ -20,4 +20,6 @@ class Call(Base):
     caller_phone = Column(String)
     transcript = Column(String)
     intent = Column(String)
+    summary = Column(String)
+    sentiment = Column(String)
     created_at = Column(DateTime, server_default=func.now())
