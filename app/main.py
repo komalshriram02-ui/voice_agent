@@ -206,6 +206,15 @@ def dashboard():
     </div>
   </section>
 
+  <section style="max-width:1100px;margin:24px auto 0;padding:0 20px;">
+    <div class="panel">
+      <h2>Recent Calls (AI summary)</h2>
+      <table>
+        <thead><tr><th>What caller said</th><th>AI summary</th><th>Mood</th></tr></thead>
+        <tbody id="callRows"><tr><td colspan="3" class="empty">Loading...</td></tr></tbody>
+      </table>
+    </div>
+  </section>
   <div id="status">Loading...</div>
   <footer>Built with ❤️ using <span>FastAPI</span> by <span>Komal Shriram</span></footer>
 
@@ -269,6 +278,30 @@ function loadAppts() {
     });
 }
 
+function moodClass(m) {
+  const s = String(m || "").toLowerCase();
+  if (s === "happy") return "b-green";
+  if (s === "angry" || s === "urgent") return "b-red";
+  return "b-gray";
+}
+
+function loadCalls() {
+  fetch("/recent-calls")
+    .then(function(r) { return r.json(); })
+    .then(function(list) {
+      const body = document.getElementById("callRows");
+      if (!list.length) {
+        body.innerHTML = '<tr><td colspan="3" class="empty">No calls yet</td></tr>';
+        return;
+      }
+      body.innerHTML = list.map(function(c) {
+        const mood = c.sentiment ? '<span class="badge ' + moodClass(c.sentiment) + '">' + esc(c.sentiment) + "</span>" : "-";
+        return "<tr><td>" + esc(c.transcript) + "</td><td>" + esc(c.summary || "-") + "</td><td>" + mood + "</td></tr>";
+      }).join("");
+    });
+}
+loadCalls();
+setInterval(loadCalls, 5000);
 loadStats();
 loadAppts();
 setInterval(loadStats, 5000);
@@ -858,3 +891,18 @@ fetch("/stats")
 </body>
 </html>
 """
+
+
+@app.get("/recent-calls")
+def recent_calls(db: Session = Depends(get_db)):
+    rows = db.query(models.Call).order_by(models.Call.id.desc()).limit(8).all()
+    return [
+        {
+            "id": r.id,
+            "transcript": r.transcript,
+            "intent": r.intent,
+            "summary": r.summary,
+            "sentiment": r.sentiment,
+        }
+        for r in rows
+    ]
