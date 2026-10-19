@@ -42,19 +42,30 @@ def list_appointments(db: Session = Depends(get_db)):
     return db.query(models.Appointment).all()
 
 
+from fastapi import BackgroundTasks
+
+
+def _save_analysis(call_id, transcript):
+    summary, sentiment = analyze_call(transcript)
+    with Session(engine) as s:
+        c = s.get(models.Call, call_id)
+        if c:
+            c.summary = summary
+            c.sentiment = sentiment
+            s.commit()
+
+
 @app.post("/calls")
-def create_call(data: CallCreate, db: Session = Depends(get_db)):
-    summary, sentiment = analyze_call(data.transcript)
+def create_call(data: CallCreate, background: BackgroundTasks, db: Session = Depends(get_db)):
     call = models.Call(
         caller_phone=data.caller_phone,
         transcript=data.transcript,
         intent=detect_intent(data.transcript),
-        summary=summary,
-        sentiment=sentiment,
     )
     db.add(call)
     db.commit()
     db.refresh(call)
+    background.add_task(_save_analysis, call.id, data.transcript)
     return call
 
 
@@ -564,9 +575,35 @@ function handle(text) {
     })
     .then(function(r) { return r.json(); })
     .then(function(d) {
-      if (d.intent == "book_appointment") {
-        step = "name";
-        say(L.name, true);
+    if (d.intent == "book_appointment") {
+        fetch("/extract-booking", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({transcript: text})
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(x) {
+          if (x.name && x.datetime) {
+            custName = x.name;
+            fetch("/appointments", {
+              method: "POST",
+              headers: {"Content-Type": "application/json"},
+              body: JSON.stringify({customer_name: x.name, phone: "browser", appointment_time: x.datetime})
+            })
+            .then(function(r) {
+              step = "start";
+              if (r.ok) say(L.booked(x.name), false);
+              else say(L.error, false);
+            });
+          } else {
+            step = "name";
+            say(L.name, true);
+          }
+        })
+        .catch(function() {
+          step = "name";
+          say(L.name, true);
+        });  
       } else if (d.intent == "cancel_appointment") {
         step = "cancelname";
         say(L.cancelq, true);
@@ -906,3 +943,12 @@ def recent_calls(db: Session = Depends(get_db)):
         }
         for r in rows
     ]
+
+class ExtractIn(BaseModel):
+    transcript: str
+
+
+@app.post("/extract-booking")
+def extract_booking_api(data: ExtractIn):
+    name, when = extract_booking(data.transcript)
+    return {"name": name, "datetime": when}    
