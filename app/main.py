@@ -952,3 +952,157 @@ class ExtractIn(BaseModel):
 def extract_booking_api(data: ExtractIn):
     name, when = extract_booking(data.transcript)
     return {"name": name, "datetime": when}    
+
+
+import hashlib
+import hmac
+import secrets
+from fastapi import Request
+from fastapi.responses import JSONResponse
+
+SECRET_KEY = "komal's-voice-agent"
+
+
+def hash_password(password: str, salt: str = None) -> str:
+    if salt is None:
+        salt = secrets.token_hex(16)
+    h = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 100000).hex()
+    return salt + "$" + h
+
+
+def verify_password(password: str, stored: str) -> bool:
+    salt = stored.split("$", 1)[0]
+    return hmac.compare_digest(hash_password(password, salt), stored)
+
+
+def make_token(username: str) -> str:
+    sig = hmac.new(SECRET_KEY.encode(), username.encode(), hashlib.sha256).hexdigest()
+    return username + "." + sig
+
+
+def read_token(token):
+    if not token or "." not in token:
+        return None
+    username, sig = token.rsplit(".", 1)
+    expected = hmac.new(SECRET_KEY.encode(), username.encode(), hashlib.sha256).hexdigest()
+    if hmac.compare_digest(sig, expected):
+        return username
+    return None
+
+
+def current_user(request: Request):
+    return read_token(request.cookies.get("session"))
+
+
+class AuthData(BaseModel):
+    username: str
+    password: str
+
+
+@app.post("/signup")
+def signup(data: AuthData, db: Session = Depends(get_db)):
+    username = data.username.strip().lower()
+    if len(username) < 3 or len(data.password) < 6:
+        return JSONResponse({"ok": False, "error": "Username min 3 and password min 6 characters."}, status_code=400)
+    if db.query(models.User).filter(models.User.username == username).first():
+        return JSONResponse({"ok": False, "error": "This username is already taken."}, status_code=400)
+    user = models.User(username=username, password_hash=hash_password(data.password))
+    db.add(user)
+    db.commit()
+    resp = JSONResponse({"ok": True})
+    resp.set_cookie("session", make_token(username), httponly=True, samesite="lax")
+    return resp
+
+
+@app.post("/login")
+def login(data: AuthData, db: Session = Depends(get_db)):
+    username = data.username.strip().lower()
+    user = db.query(models.User).filter(models.User.username == username).first()
+    if not user or not verify_password(data.password, user.password_hash):
+        return JSONResponse({"ok": False, "error": "Wrong username or password."}, status_code=401)
+    resp = JSONResponse({"ok": True})
+    resp.set_cookie("session", make_token(username), httponly=True, samesite="lax")
+    return resp
+
+
+@app.post("/logout")
+def logout():
+    resp = JSONResponse({"ok": True})
+    resp.delete_cookie("session")
+    return resp
+
+
+@app.get("/login", response_class=HTMLResponse)
+def login_page():
+    return """
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Login</title>
+<style>
+  body { font-family: Arial, sans-serif; background: #f4f6f8; display: flex; justify-content: center; padding-top: 80px; }
+  .card { background: #fff; border-radius: 10px; padding: 30px; width: 320px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+  h2 { margin-top: 0; text-align: center; }
+  input { width: 100%; box-sizing: border-box; padding: 12px; margin: 8px 0; font-size: 16px; border: 1px solid #ccc; border-radius: 6px; }
+  button { width: 100%; background: #2563eb; color: #fff; border: none; border-radius: 6px; padding: 12px; font-size: 16px; cursor: pointer; margin-top: 8px; }
+  #msg { color: #c0392b; font-size: 14px; min-height: 20px; margin-top: 8px; text-align: center; }
+  .switch { text-align: center; margin-top: 16px; font-size: 14px; }
+  .switch a { color: #2563eb; cursor: pointer; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h2 id="title">Login</h2>
+    <input id="u" placeholder="Username" autocomplete="username">
+    <input id="p" type="password" placeholder="Password" autocomplete="current-password">
+    <button id="go" onclick="submitForm()">Login</button>
+    <div id="msg"></div>
+    <div class="switch" id="sw">New here? <a onclick="toggle()">Create an account</a></div>
+  </div>
+<script>
+var mode = "login";
+
+function toggle() {
+  mode = (mode == "login") ? "signup" : "login";
+  document.getElementById("title").innerText = (mode == "login") ? "Login" : "Sign up";
+  document.getElementById("go").innerText = (mode == "login") ? "Login" : "Create account";
+  document.getElementById("sw").innerHTML = (mode == "login")
+    ? 'New here? <a onclick="toggle()">Create an account</a>'
+    : 'Already have an account? <a onclick="toggle()">Login</a>';
+  document.getElementById("msg").innerText = "";
+}
+
+function submitForm() {
+  var u = document.getElementById("u").value;
+  var p = document.getElementById("p").value;
+  fetch("/" + mode, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({username: u, password: p})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.ok) window.location.href = "/dashboard";
+    else document.getElementById("msg").innerText = d.error || "Something went wrong.";
+  });
+}
+
+document.addEventListener("keydown", function(e) { if (e.key == "Enter") submitForm(); });
+</script>
+</body>
+</html>
+"""    
+
+
+from fastapi.responses import RedirectResponse
+
+
+@app.middleware("http")
+async def protect_pages(request: Request, call_next):
+    path = request.url.path
+    if path == "/dashboard" and not current_user(request):
+        return RedirectResponse("/login")
+    if request.method == "GET" and path in ("/stats", "/appointments", "/calls") and not current_user(request):
+        return JSONResponse({"error": "Please login first."}, status_code=401)
+    return await call_next(request)
